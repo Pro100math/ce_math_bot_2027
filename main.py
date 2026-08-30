@@ -41,15 +41,7 @@ MODELS_PROMPTS = {
     "В8": "Экономическая задача на проценты с изменением базы и невозвратным сервисным сбором."
 }
 
-def clean_json_string(raw_str: str) -> str:
-    clean_str = raw_str.strip()
-    if clean_str.startswith("```"):
-        clean_str = re.sub(r"^```(?:json)?\s*", "", clean_str)
-        clean_str = re.sub(r"\s*```$", "", clean_str)
-    return clean_str.strip()
-
 async def generate_ai_task(task_num: str, year: int, variant: int):
-    # ОБНОВЛЕНО: Переход на обязательную модель gemini-2.5-flash
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     
@@ -62,9 +54,12 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
     Где correct - строго число (индекс правильного ответа от 0 до 3).
     """
     
+    # Включаем принудительный режим Structured Outputs
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json"}
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
     }
     
     try:
@@ -73,11 +68,12 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
                 if response.status == 200:
                     res_data = await response.json()
                     raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
-                    fixed_json = clean_json_string(raw_text)
-                    return json.loads(fixed_json)
+                    return json.loads(raw_text.strip())
                 else:
+                    logging.error(f"Gemini API Error Code: {response.status}")
                     return None
-    except:
+    except Exception as e:
+        logging.error(f"Gemini Connection Exception: {e}")
         return None
 
 def init_db():
