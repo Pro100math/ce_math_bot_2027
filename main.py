@@ -20,58 +20,11 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
-# Наша собственная, 100% легальная база задач-аналогов ЦЭ (Числа изменены)
-DATABASE = [
-    {
-        "year": 2023, "variant": 1, "task_num": "А1", "type": "А", "topic": "Обыкновенные дроби",
-        "question": "Среди значений переменной х, равных 16; 13; 14; 17; 15, укажите то, при котором дробь х/14 является правильной.",
-        "options": ["16", "13", "14", "17"],
-        "correct": 1,
-        "explain": "⚠️ Ловушка РИКЗ! По определению, обыкновенная дробь является правильной, если её числитель строго меньше знаменателя (х < 14). Подходит только число 13."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "А2", "type": "А", "topic": "Алгебраические выражения",
-        "question": "Укажите номер выражения, которое является суммой двух последовательных натуральных чисел, меньшее из которых равно m.",
-        "options": ["2m - 2", "2m - 1", "m + 1", "2m + 1"],
-        "correct": 3,
-        "explain": "⚠️ Ловушка последовательности! Если меньшее число равно m, то следующее за ним равно (m + 1). Их сумма: m + (m + 1) = 2m + 1."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "А3", "type": "А", "topic": "Планиметрия. Окружность",
-        "question": "Если KM — диаметр, О — center окружности, а угол LOK = 114° (где точка L лежит на окружности), то градусная мера вписанного угла LMK равна:",
-        "options": ["66°", "33°", "57°", "48°"],
-        "correct": 2,
-        "explain": "⚠️ Ловушка углов! Вписанный угол LMK опирается на ту же дугу LK, что и центральный угол LOK. По теореме он равен его половине: 114° / 2 = 57°."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "А4", "type": "А", "topic": "Системы неравенств",
-        "question": "Среди чисел √14; √6; √2; √19; √27 укажите то, которое является решением системы неравенств:\n[x ≥ 4,\n[x < 5.",
-        "options": ["√14", "√6", "√19", "√27"],
-        "correct": 2,
-        "explain": "⚠️ Ловушка иррациональности! Границы системы в виде корней: √16 ≤ x < √25. Из предложенного числового ряда подходит только число √19."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "А5", "type": "А", "topic": "Свойства степенных функций",
-        "question": "Среди значений аргумента х, равных 1/81; 1/3; 1/64; 1/16; 1/100, укажите то, при котором значение функции f(x) = √х меньше 1/9.",
-        "options": ["1/81", "1/64", "1/16", "1/100"],
-        "correct": 3,
-        "explain": "⚠️ Ловушка знаков сравнения! Решаем неравенство: √х < 1/9 => х < 1/81. Среди предложенных дробей только 1/100 строго меньше, чем 1/81."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "В1", "type": "В", "topic": "Признаки делимости",
-        "question": "Выберите верные утверждения:\n1) число 438 кратно числу 3\n2) число 275 кратно числу 9\n3) число 890 кратно числу 10\n4) число 512 кратно числу 4\n\nОтвет запишите цифрами вариантов в порядке возрастания (например: 134).",
-        "options": ["134", "124", "135", "234"],
-        "correct": 0,
-        "explain": "⚠️ Ловушка признаков делимости! 1) 4+3+8=15 (делится на 3) — верно; 3) оканчивается на 0 — верно; 4) 12 делится на 4 — верно. Правильный ответ: 134."
-    },
-    {
-        "year": 2023, "variant": 1, "task_num": "В4", "type": "В", "topic": "Арифметическая прогрессия",
-        "question": "Дана арифметическая прогрессия: 30; 26; 22; ... Найдите сумму шести первых членов этой прогрессии.",
-        "options": ["120", "115", "105", "130"],
-        "correct": 0,
-        "explain": "⚠️ Ловушка знаков! Разность d = 26 - 30 = -4. Шестой член: a₆ = 30 + 5*(-4) = 10. Сумма: S₆ = ((30 + 10) / 2) * 6 = 120."
-    }
-]
+# МАГИЯ ПОДКЛЮЧЕНИЯ: Импортируем нашу базу 30 задач из файла tasks_base.py
+try:
+    from tasks_base import DATABASE
+except ImportError:
+    DATABASE = []
 
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
@@ -91,17 +44,17 @@ async def cmd_start(m: types.Message, state: FSMContext):
     
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     
-    available_years = [2023, 2024, 2025, 2026]
+    # Полный список доступных сборников РИКЗ
+    available_years =
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
     await m.answer(
         "🎓 Комплекс **«ЦЭ 2027: БЕЗ ОШИБОК»**.\n\n"
-        "Все задачи-аналоги зашиты в память бота и работают без задержек!\n"
+        "Полный интерактивный тест (30 задач: 10 Часть А + 20 Часть Б).\n"
         "Выберите год сборника для тренировки:", 
         reply_markup=b.adjust(2).as_markup()
     )
@@ -109,7 +62,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_")[1])
+    year = int(c.data.split("_"))
     await state.update_data(year=year)
     
     b = InlineKeyboardBuilder()
@@ -120,14 +73,13 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_")[1])
+    var_num = int(c.data.split("_"))
     user_data = await state.get_data()
     year = int(user_data['year'])
     
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('UPDATE users SET current_year = ?, current_variant = ?, current_task_idx = 0, score = 0, errors_log = "" WHERE user_id = ?', (year, var_num, c.from_user.id))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     
     await c.message.delete()
     await send_local_question(c.from_user.id, state)
@@ -150,8 +102,7 @@ async def send_local_question(uid: int, state: FSMContext):
         conn.close()
         clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Полная готовность к 100 баллам! 🏆"
         await bot.send_message(uid, f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(filtered_tasks)}.\n🔍 Темы для повторения:\n_{clean_logs}_", parse_mode="Markdown")
-        await state.clear()
-        return
+        await state.clear(); return
 
     q = filtered_tasks[idx]
     await state.update_data(correct_idx=int(q['correct']), current_explain=q['explain'], current_topic=q['topic'])
@@ -165,7 +116,7 @@ async def send_local_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_")[1])
+    ans = int(c.data.split("_"))
     d = await state.get_data()
     uid = c.from_user.id
     
@@ -175,14 +126,13 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res[0] if log_res and log_res[0] else ""
+        log = log_res if log_res and log_res else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
         
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (uid,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     
     b = InlineKeyboardBuilder().button(text="Дальше ➡️", callback_data="next_local_task")
     await c.message.answer(txt, reply_markup=b.as_markup())
