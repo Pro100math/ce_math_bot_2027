@@ -34,7 +34,6 @@ MODELS_PROMPTS = {
 }
 
 async def generate_ai_task(task_num: str, year: int, variant: int):
-    # Исправлено на официальную модель gemini-1.5-flash
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     prompt = f"""
@@ -49,8 +48,15 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
             async with s.post(url, json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}) as r:
                 if r.status == 200:
                     res = await r.json()
-                    return json.loads(res['candidates']['content']['parts']['text'])
-    except: return None
+                    # ИСПРАВЛЕНО: Добавлены точные индексы [0] для разбора ответа ИИ
+                    raw_text = res['candidates'][0]['content']['parts'][0]['text']
+                    return json.loads(raw_text)
+                else:
+                    logging.error(f"Gemini Error Status: {r.status}")
+                    return None
+    except Exception as e: 
+        logging.error(f"Gemini Exception: {e}")
+        return None
 
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
@@ -74,7 +80,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    await state.update_data(year=int(c.data.split("_")[1]))
+    await state.update_data(year=int(c.data.split("_")))
     b = InlineKeyboardBuilder()
     for v in range(1, 11): b.button(text=f"Вар {v}", callback_data=f"var_{v}")
     await c.message.edit_text("📅 Выберите номер варианта (1-10):", reply_markup=b.adjust(5).as_markup())
@@ -82,7 +88,7 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_")[1])
+    var_num = int(c.data.split("_"))
     year = int((await state.get_data())['year'])
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('UPDATE users SET current_year = ?, current_variant = ?, current_task_idx = 0, score = 0, errors_log = "" WHERE user_id = ?', (year, var_num, c.from_user.id))
@@ -119,7 +125,7 @@ async def send_ai_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_")[1])
+    ans = int(c.data.split("_"))
     d = await state.get_data()
     conn = sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
@@ -127,7 +133,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (c.from_user.id,)).fetchone()
-        log = log_res[0] if log_res else ""
+        log = log_res[0] if log_res and log_res[0] else ""
         if d['current_topic'] not in log: conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", c.from_user.id))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (c.from_user.id,))
