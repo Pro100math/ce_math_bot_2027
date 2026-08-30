@@ -62,7 +62,9 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
+    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан список ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
+    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -70,7 +72,7 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     # Кнопка комплексного финального теста на закрепление материала
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
     
-    # НОВАЯ КНОПКА: Подключаем учебный теоретический комплекс
+    # Подключаем учебный теоретический комплекс
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
