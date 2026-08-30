@@ -27,7 +27,7 @@ class TrainerStates(StatesGroup):
 MODELS_PROMPTS = {
     "А1": "Определение правильной обыкновенной дроби. Дай числовой ряд, спроси при каком x дробь правильная.",
     "А2": "Составление выражения суммы двух последовательных натуральных чисел, меньшее равно m.",
-    "А3": "Геометрия. Свойства вписанного и центрального угла на одной дуге. Дай центральный, спроси вписанный.",
+    "А3": "Геометрия. Свойства вписанного и центрального угла на одной дуге. Дай значение центрального угла, спроси вписанный угол.",
     "А4": "Система неравенств [x >= a, x < b], варианты ответов в виде квадратных корней.",
     "А5": "Свойства f(x) = sqrt(x). Дай неравенство sqrt(x) < 1/n и числовой ряд дробей.",
     "А6": "Нули 5 функций с ОДЗ. Найти при каком х результат 0 для отрицательного числа.",
@@ -49,6 +49,7 @@ def clean_json_string(raw_str: str) -> str:
     return clean_str.strip()
 
 async def generate_ai_task(task_num: str, year: int, variant: int):
+    # ОБНОВЛЕНО: Переход на обязательную модель gemini-2.5-flash
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     
@@ -68,10 +69,10 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=15) as response:
+            async with session.post(url, json=payload, timeout=20) as response:
                 if response.status == 200:
                     res_data = await response.json()
-                    raw_text = res_data['candidates']['content']['parts']['text']
+                    raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
                     fixed_json = clean_json_string(raw_text)
                     return json.loads(fixed_json)
                 else:
@@ -104,9 +105,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.commit()
     conn.close()
     
-    # Строка полностью заполнена и проверена компилятором
     available_years = [2023, 2024, 2025, 2026]
-    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -121,7 +120,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_"))
+    year = int(c.data.split("_")[1])
     await state.update_data(year=year)
     
     b = InlineKeyboardBuilder()
@@ -133,7 +132,7 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_"))
+    var_num = int(c.data.split("_")[1])
     user_data = await state.get_data()
     year = int(user_data['year'])
     
@@ -187,7 +186,7 @@ async def send_ai_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_"))
+    ans = int(c.data.split("_")[1])
     d = await state.get_data()
     uid = c.from_user.id
     
@@ -197,7 +196,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res if log_res and log_res else ""
+        log = log_res[0] if log_res and log_res[0] else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
