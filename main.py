@@ -20,7 +20,6 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
-# Импортируем нашу базу 30 задач из файла tasks_base.py
 try:
     from tasks_base import DATABASE
 except ImportError:
@@ -47,8 +46,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.commit()
     conn.close()
     
-    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан доступный сборник
-    available_years = [2023]
+    available_years = [2023, 2024, 2025, 2026]
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -123,7 +121,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
     d = await state.get_data()
     uid = c.from_user.id
     
-    conn = sqlite3.sqlite3.connect('ce_math_2027.db')
+    conn = sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
         conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (uid,))
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
