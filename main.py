@@ -20,10 +20,27 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
-try:
-    from tasks_base import DATABASE
-except ImportError:
-    DATABASE = []
+def get_database_by_year(year: int):
+    """Динамически подключаем нужный файл с заданиями в зависимости от года или финала"""
+    try:
+        if year == 2023:
+            from tasks_2023 import DATABASE
+            return DATABASE
+        elif year == 2024:
+            from tasks_2024 import DATABASE
+            return DATABASE
+        elif year == 2025:
+            from tasks_2025 import DATABASE
+            return DATABASE
+        elif year == 2026:
+            from tasks_2026 import DATABASE
+            return DATABASE
+        elif year == 2027:
+            from tasks_final import DATABASE
+            return DATABASE
+    except ImportError:
+        logging.error(f"Не удалось загрузить файл заданий для {year} года")
+    return []
 
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
@@ -37,7 +54,6 @@ def init_db():
     conn.close()
 
 async def show_main_menu(message: types.Message, state: FSMContext, user_id: int, full_name: str):
-    """Единая выверенная функция вывода главного меню выбора сборников"""
     await state.clear()
     init_db()
     
@@ -46,17 +62,18 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
-    # Список лет заполнен до конца, синтаксис закрыт
     available_years = [2023, 2024, 2025, 2026]
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
+    # Кнопка комплексного финального теста на закрепление
+    b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
+    
     await message.answer(
-        "🎓 Комплекс **«ЦЭ 2027: БЕЗ ОШИБОК»**.\n\n"
-        "Полный интерактивный тест (30 задач: 10 Часть А + 20 Часть Б).\n"
-        "Выберите год сборника для тренировки:", 
-        reply_markup=b.adjust(2).as_markup()
+        "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n\n"
+        "Все учебные базы успешно подключены. Пройдите архивные сборники или запустите финальный контрольный срез:\n", 
+        reply_markup=b.adjust(2, 2, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
 
@@ -66,18 +83,19 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_")[1])
+    year = int(c.data.split("_"))
     await state.update_data(year=year)
     
     b = InlineKeyboardBuilder()
     b.button(text="Вариант 1", callback_data="var_1")
     
-    await c.message.edit_text(f"Выбран сборник {year} года. 📅\nТеперь выберите вариант:", reply_markup=b.adjust(1).as_markup())
+    title_text = "Контрольный тест на закрепление" if year == 2027 else f"Сборник {year} года"
+    await c.message.edit_text(f"Выбран: {title_text}. 📅\nТеперь выберите вариант:", reply_markup=b.adjust(1).as_markup())
     await state.set_state(TrainerStates.choosing_variant)
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_")[1])
+    var_num = int(c.data.split("_"))
     user_data = await state.get_data()
     year = int(user_data['year'])
     
@@ -99,22 +117,26 @@ async def send_local_question(uid: int, state: FSMContext):
         return
         
     year, var, idx = row
-    filtered_tasks = [t for t in DATABASE if t['year'] == year and t['variant'] == var]
+    current_database = get_database_by_year(year)
+    filtered_tasks = [t for t in current_database if t['year'] == year and t['variant'] == var]
     
+    if not filtered_tasks:
+        await bot.send_message(uid, f"⚠️ База данных для этого раздела ещё наполняется методистом.")
+        return
+
     if idx >= len(filtered_tasks):
         conn = sqlite3.connect('ce_math_2027.db')
         score, logs = conn.execute('SELECT score, errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
         conn.close()
         
-        clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Полная готовность к 100 баллам! 🏆"
+        clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Идеальный уровень закрепления материала! 🏆"
         
-        # Интерактивная кнопка цикличного возврата в начало
         b = InlineKeyboardBuilder()
-        b.button(text="🔄 Начать сначала", callback_data="back_to_start")
+        b.button(text="🔄 Вернуться в начало", callback_data="back_to_start")
         
         await bot.send_message(
             uid, 
-            f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(filtered_tasks)}.\n🔍 Темы для повторения:\n_{clean_logs}_", 
+            f"🎯 **Тест завершен!**\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
             parse_mode="Markdown",
             reply_markup=b.as_markup()
         )
@@ -133,26 +155,25 @@ async def send_local_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data == "back_to_start")
 async def handle_back_to_start(c: types.CallbackQuery, state: FSMContext):
-    """Исправленный обработчик клика кнопки возврата в меню"""
     await c.message.delete()
     await show_main_menu(c.message, state, c.from_user.id, c.from_user.full_name)
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_")[1])
+    ans = int(c.data.split("_"))
     d = await state.get_data()
     uid = c.from_user.id
     
     conn = sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
         conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (uid,))
-        txt = f"✅ **Верно!**\n\n{d['current_explain']}"
+        txt = f"✅ **Абсолютно верно! Ловушка успешно обойдена.**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res[0] if log_res and log_res[0] else ""
+        log = log_res if log_res and log_res else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
-        txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
+        txt = f"❌ **Попадание в капкан РИКЗ!**\n\n{d['current_explain']}"
         
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (uid,))
     conn.commit()
