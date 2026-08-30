@@ -48,7 +48,7 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
             async with s.post(url, json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}) as r:
                 if r.status == 200:
                     res = await r.json()
-                    return json.loads(res['candidates'][0]['content']['parts'][0]['text'])
+                    return json.loads(res['candidates']['content']['parts']['text'])
     except: return None
 
 def init_db():
@@ -64,10 +64,13 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
     conn.commit(); conn.close()
     
+    # Полностью исправленный список всех ваших 4 сборников ЦЭ
+    available_years = [2023, 2024, 2025, 2026]
+    
     b = InlineKeyboardBuilder()
-    for y in:
+    for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
-    await m.answer("🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n🤖 ИИ генерирует легальные аналоги задач РИКЗ на лету!\nВыберите год:", reply_markup=b.adjust(2).as_markup())
+    await m.answer("🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n🤖 ИИ генерирует легальные аналоги задач РИКЗ на лету!\nВыберите год сборника для тренировки:", reply_markup=b.adjust(2).as_markup())
     await state.set_state(TrainerStates.choosing_year)
 
 @dp.callback_query(F.data.startswith("year_"))
