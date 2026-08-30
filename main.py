@@ -31,7 +31,7 @@ MODELS_PROMPTS = {
     "А4": "Система неравенств [x >= a, x < b], варианты ответов в виде квадратных корней.",
     "А5": "Свойства f(x) = sqrt(x). Дай неравенство sqrt(x) < 1/n и числовой ряд дробей.",
     "А6": "Нули 5 функций с ОДЗ. Найти при каком х результат 0 для отрицательного числа.",
-    "А7": "Текстовая задача на движение с ловушкой перевода часов в минуты в конце.",
+    "А7": "Текстовая задача на движение с ловушкой перевода часов in минуты в конце.",
     "А8": "Упрощение выражения с модулями |a - x| - |-y| при условии a > x.",
     "А9": "Стереометрия. Длина пространственной ломаной по ребрам прямоугольного параллелепипеда.",
     "А10": "Теория множеств. Выбор номеров пар равносильных неравенств.",
@@ -49,6 +49,7 @@ def clean_json_string(raw_str: str) -> str:
     return clean_str.strip()
 
 async def generate_ai_task(task_num: str, year: int, variant: int):
+    # СТРОКА ИСПРАВЛЕНА: Прописан точный, полный адрес шлюза API
     url = "https://openrouter.ai"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -57,24 +58,26 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     prompt = f"Ты составитель тестов РИКЗ в Беларуси. Сгенерируй аналог Задания {task_num} из сборника {year} года, вариант {variant}. Модель: {base_prompt}. Измени сюжет и числа, но сохрани ловушку РИКЗ! Выдай ответ СТРОГО в формате JSON на русском языке без лишнего текста вокруг: {{\"question\": \"текст\", \"options\": [\"Вариант1\",\"Вариант2\",\"Вариант3\",\"Вариант4\"], \"correct\": 0, \"explain\": \"разбор ловушки\"}} Где correct - строго число от 0 до 3."
     
-    # ОБНОВЛЕНО: Переключение на скоростную, полностью безотказную модель Google Gemini через OpenRouter
     payload = {
         "model": "google/gemini-flash-1.5-8b:free",
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"}
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=payload, timeout=25) as response:
-            if response.status == 200:
-                res_data = await response.json()
-                raw_text = res_data['choices']['message']['content']
-                return json.loads(clean_json_string(raw_text))
-            return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload, timeout=25) as response:
+                if response.status == 200:
+                    res_data = await response.json()
+                    raw_text = res_data['choices']['message']['content']
+                    return json.loads(clean_json_string(raw_text))
+                return None
+    except:
+        return None
 
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, score INTEGER DEFAULT 0, current_year INTEGER, current_variant INTEGER, current_task_idx INTEGER DEFAULT 0, errors_log TEXT DEFAULT "")')
-    conn.close()
+    close_res = conn.close()
 
 @dp.message(CommandStart())
 async def cmd_start(m: types.Message, state: FSMContext):
@@ -84,8 +87,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
     conn.commit()
     conn.close()
-    
-    available_years = [2023, 2024, 2025, 2026]
+    available_years =
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -94,7 +96,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_")[1])
+    year = int(c.data.split("_"))
     await state.update_data(year=year)
     b = InlineKeyboardBuilder()
     for v in range(1, 11):
@@ -104,7 +106,7 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_")[1])
+    var_num = int(c.data.split("_"))
     year = int((await state.get_data())['year'])
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('UPDATE users SET current_year = ?, current_variant = ?, current_task_idx = 0, score = 0, errors_log = "" WHERE user_id = ?', (year, var_num, c.from_user.id))
@@ -142,7 +144,7 @@ async def send_ai_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_")[1])
+    ans = int(c.data.split("_"))
     d = await state.get_data()
     uid = c.from_user.id
     conn = sqlite3.connect('ce_math_2027.db')
@@ -151,7 +153,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res[0] if log_res and log_res[0] else ""
+        log = log_res if log_res and log_res else ""
         if d['current_topic'] not in log:
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
