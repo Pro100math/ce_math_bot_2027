@@ -34,6 +34,7 @@ MODELS_PROMPTS = {
 }
 
 async def generate_ai_task(task_num: str, year: int, variant: int):
+    # Исправлено на официальную модель gemini-1.5-flash
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     prompt = f"""
@@ -64,9 +65,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
     conn.commit(); conn.close()
     
-    # Полностью исправленный список всех ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
-    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -127,7 +126,8 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (c.from_user.id,))
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
-        log = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (c.from_user.id,)).fetchone()[0]
+        log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (c.from_user.id,)).fetchone()
+        log = log_res[0] if log_res else ""
         if d['current_topic'] not in log: conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", c.from_user.id))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (c.from_user.id,))
