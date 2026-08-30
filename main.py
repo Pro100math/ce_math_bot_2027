@@ -36,28 +36,33 @@ def init_db():
     ''')
     conn.close()
 
-@dp.message(CommandStart())
-async def cmd_start(m: types.Message, state: FSMContext):
+async def show_main_menu(message: types.Message, state: FSMContext, user_id: int, full_name: str):
+    """Единая выверенная функция вывода главного меню выбора сборников"""
     await state.clear()
     init_db()
     
     conn = sqlite3.connect('ce_math_2027.db')
-    conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
+    conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (user_id, full_name))
     conn.commit()
     conn.close()
     
+    # Список лет заполнен до конца, синтаксис закрыт
     available_years = [2023, 2024, 2025, 2026]
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
-    await m.answer(
+    await message.answer(
         "🎓 Комплекс **«ЦЭ 2027: БЕЗ ОШИБОК»**.\n\n"
         "Полный интерактивный тест (30 задач: 10 Часть А + 20 Часть Б).\n"
         "Выберите год сборника для тренировки:", 
         reply_markup=b.adjust(2).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
+
+@dp.message(CommandStart())
+async def cmd_start(m: types.Message, state: FSMContext):
+    await show_main_menu(m, state, m.from_user.id, m.from_user.full_name)
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
@@ -100,8 +105,19 @@ async def send_local_question(uid: int, state: FSMContext):
         conn = sqlite3.connect('ce_math_2027.db')
         score, logs = conn.execute('SELECT score, errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
         conn.close()
+        
         clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Полная готовность к 100 баллам! 🏆"
-        await bot.send_message(uid, f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(filtered_tasks)}.\n🔍 Темы для повторения:\n_{clean_logs}_", parse_mode="Markdown")
+        
+        # Интерактивная кнопка цикличного возврата в начало
+        b = InlineKeyboardBuilder()
+        b.button(text="🔄 Начать сначала", callback_data="back_to_start")
+        
+        await bot.send_message(
+            uid, 
+            f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(filtered_tasks)}.\n🔍 Темы для повторения:\n_{clean_logs}_", 
+            parse_mode="Markdown",
+            reply_markup=b.as_markup()
+        )
         await state.clear()
         return
 
@@ -114,6 +130,12 @@ async def send_local_question(uid: int, state: FSMContext):
         
     await bot.send_message(uid, f"📊 **Задание {q['task_num']} (Часть {q['type']})**\nРаздел: #{q['topic'].replace(' ', '_')}\n\n{q['question']}", reply_markup=b.adjust(1).as_markup())
     await state.set_state(TrainerStates.solving)
+
+@dp.callback_query(F.data == "back_to_start")
+async def handle_back_to_start(c: types.CallbackQuery, state: FSMContext):
+    """Исправленный обработчик клика кнопки возврата в меню"""
+    await c.message.delete()
+    await show_main_menu(c.message, state, c.from_user.id, c.from_user.full_name)
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
