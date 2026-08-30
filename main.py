@@ -16,13 +16,12 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Состояния процесса обучения (FSM)
 class TrainerStates(StatesGroup):
     choosing_year = State()
     choosing_variant = State()
     solving = State()
 
-# Загрузка базы данных заданий-аналогов из JSON
+# Загрузка базы данных аналогов из JSON
 with open('tasks.json', 'r', encoding='utf-8') as f:
     DATABASE = json.load(f)
 
@@ -55,8 +54,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     conn.commit()
     conn.close()
     
-    # Получаем список годов, которые заложены в tasks.json
-    years = sorted(list(set([task['year'] for task in DATABASE])))
+    years = sorted(list(set([int(task['year']) for task in DATABASE])))
     
     builder = InlineKeyboardBuilder()
     for year in years:
@@ -66,7 +64,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer(
         f"Приветствуем, {username}! 👋\n"
         f"Вы запустили официальный тренажёр-аналог **«ЦЭ 2027: БЕЗ ОШИБОК»**.\n\n"
-        f"Все задачи переработаны на основе тестов РИКЗ с изменёнными числами для защиты авторских прав.\n\n"
+        f"Все задачи переработаны на основе тестов РИКЗ с изменёнными числами.\n\n"
         f"Выберите год сборника для тренировки:", 
         reply_markup=builder.as_markup()
     )
@@ -77,8 +75,7 @@ async def process_year(callback: types.CallbackQuery, state: FSMContext):
     year = int(callback.data.split("_")[1])
     await state.update_data(year=year)
     
-    # Получаем варианты, доступные для этого года в JSON
-    variants = sorted(list(set([task['variant'] for task in DATABASE if task['year'] == year])))
+    variants = sorted(list(set([int(task['variant']) for task in DATABASE if int(task['year']) == year])))
     
     builder = InlineKeyboardBuilder()
     for v in variants:
@@ -95,7 +92,7 @@ async def process_year(callback: types.CallbackQuery, state: FSMContext):
 async def process_variant(callback: types.CallbackQuery, state: FSMContext):
     var_num = int(callback.data.split("_")[1])
     user_data = await state.get_data()
-    year = user_data['year']
+    year = int(user_data['year'])
     user_id = callback.from_user.id
     
     conn = sqlite3.connect('ce_math_2027.db')
@@ -114,8 +111,8 @@ async def send_json_question(user_id: int, state: FSMContext):
     year, var, idx = cursor.fetchone()
     conn.close()
     
-    # Фильтруем список задач из нашего JSON под выбранный год и вариант
-    filtered_tasks = [task for task in DATABASE if task['year'] == year and task['variant'] == var]
+    # Жесткое приведение к int для стабильной фильтрации
+    filtered_tasks = [task for task in DATABASE if int(task['year']) == int(year) and int(task['variant']) == int(var)]
     
     if idx >= len(filtered_tasks):
         conn = sqlite3.connect('ce_math_2027.db')
@@ -162,7 +159,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     cursor.execute('SELECT current_year, current_variant FROM users WHERE user_id = ?', (user_id,))
     year, var = cursor.fetchone()
     
-    filtered_tasks = [task for task in DATABASE if task['year'] == year and task['variant'] == var]
+    filtered_tasks = [task for task in DATABASE if int(task['year']) == int(year) and int(task['variant']) == int(var)]
     q = filtered_tasks[idx]
     
     if ans_idx == q["correct"]:
@@ -170,8 +167,8 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
         status_text = f"✅ **Абсолютно верно!**\n\n{q['explain']}"
     else:
         cursor.execute('SELECT errors_log FROM users WHERE user_id = ?', (user_id,))
-        res = cursor.fetchone()[0]
-        current_log = res if res else ""
+        res = cursor.fetchone()
+        current_log = res[0] if res and res[0] else ""
         if q['topic'] not in current_log:
             new_log = f"{current_log} • {q['topic']}"
             cursor.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (new_log, user_id))
