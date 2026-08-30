@@ -1,4 +1,10 @@
-import asyncio, sqlite3, logging, os, aiohttp, json
+import asyncio
+import sqlite3
+import logging
+import os
+import aiohttp
+import json
+import re
 import pandas as pd
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
@@ -6,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+# Извлекаем ключи из безопасного хранилища сервера Render
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -14,8 +21,11 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 class TrainerStates(StatesGroup):
-    choosing_year, choosing_variant, solving = State(), State(), State()
+    choosing_year = State()
+    choosing_variant = State()
+    solving = State()
 
+# Дидактические спецификации капканов РИКЗ для ИИ
 MODELS_PROMPTS = {
     "А1": "Определение правильной обыкновенной дроби. Дай числовой ряд, спроси при каком x дробь правильная.",
     "А2": "Составление выражения суммы двух последовательных натуральных чисел, меньшее равно m.",
@@ -33,111 +43,172 @@ MODELS_PROMPTS = {
     "В8": "Экономическая задача на проценты с изменением базы и невозвратным сервисным сбором."
 }
 
+def clean_json_string(raw_str: str) -> str:
+    """Очищает ответ ИИ от возможных Markdown-оберток ```json ... ```"""
+    clean_str = raw_str.strip()
+    if clean_str.startswith("```"):
+        clean_str = re.sub(r"^```(?:json)?\s*", "", clean_str)
+        clean_str = re.sub(r"\s*```$", "", clean_str)
+    return clean_str.strip()
+
 async def generate_ai_task(task_num: str, year: int, variant: int):
+    """Выверенный запрос к Gemini 1.5 Flash с гарантированной очисткой JSON"""
     url = f"https://googleapis.com{GEMINI_API_KEY}"
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
+    
     prompt = f"""
     Ты составитель тестов РИКЗ в Беларуси. Сгенерируй аналог Задания {task_num} из сборника {year} года, вариант {variant}.
     Модель: {base_prompt}. Измени сюжет и числа, чтобы не нарушать авторские права, но сохрани ловушку РИКЗ!
-    Выдай ответ СТРОГО в формате JSON на русском языке:
-    {{"question": "текст", "options": ["1","2","3","4"], "correct": 0, "explain": "разбор ловушки"}}
-    Где correct - индекс правильного ответа (0-3).
+    Выдай ответ СТРОГО в формате JSON на русском языке. Никакого другого текста вокруг!
+    Формат ответа:
+    {{"question": "текст", "options": ["Вариант1","Вариант2","Вариант3","Вариант4"], "correct": 0, "explain": "разбор ловушки"}}
+    Где correct - строго число (индекс правильного ответа от 0 до 3).
     """
+    
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json"}
+    }
+    
     try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(url, json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}) as r:
-                if r.status == 200:
-                    res = await r.json()
-                    # ИСПРАВЛЕНО: Добавлены точные индексы [0] для разбора ответа ИИ
-                    raw_text = res['candidates'][0]['content']['parts'][0]['text']
-                    return json.loads(raw_text)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=15) as response:
+                if response.status == 200:
+                    res_data = await response.json()
+                    raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
+                    fixed_json = clean_json_string(raw_text)
+                    return json.loads(fixed_json)
                 else:
-                    logging.error(f"Gemini Error Status: {r.status}")
+                    logging.error(f"Google Gemini API error status: {response.status}")
                     return None
-    except Exception as e: 
-        logging.error(f"Gemini Exception: {e}")
+    except Exception as e:
+        logging.error(f"Critical error during AI generation: {e}")
         return None
 
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
-    conn.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, score INTEGER DEFAULT 0, current_year INTEGER, current_variant INTEGER, current_task_idx INTEGER DEFAULT 0, errors_log TEXT DEFAULT "")')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY, 
+            username TEXT, 
+            score INTEGER DEFAULT 0, 
+            current_year INTEGER, 
+            current_variant INTEGER, 
+            current_task_idx INTEGER DEFAULT 0, 
+            errors_log TEXT DEFAULT ""
+        )
+    ''')
     conn.close()
 
 @dp.message(CommandStart())
 async def cmd_start(m: types.Message, state: FSMContext):
     await state.clear()
     init_db()
+    
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
     
     available_years = [2023, 2024, 2025, 2026]
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
-    await m.answer("🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n🤖 ИИ генерирует легальные аналоги задач РИКЗ на лету!\nВыберите год сборника для тренировки:", reply_markup=b.adjust(2).as_markup())
+    
+    await m.answer(
+        "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n"
+        "🤖 ИИ генерирует легальные аналоги задач РИКЗ на лету!\n\n"
+        "Выберите год сборника для тренировки:", 
+        reply_markup=b.adjust(2).as_markup()
+    )
     await state.set_state(TrainerStates.choosing_year)
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    await state.update_data(year=int(c.data.split("_")))
+    year = int(c.data.split("_")[1])
+    await state.update_data(year=year)
+    
     b = InlineKeyboardBuilder()
-    for v in range(1, 11): b.button(text=f"Вар {v}", callback_data=f"var_{v}")
+    for v in range(1, 11): 
+        b.button(text=f"Вар {v}", callback_data=f"var_{v}")
+        
     await c.message.edit_text("📅 Выберите номер варианта (1-10):", reply_markup=b.adjust(5).as_markup())
     await state.set_state(TrainerStates.choosing_variant)
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_"))
-    year = int((await state.get_data())['year'])
+    var_num = int(c.data.split("_")[1])
+    user_data = await state.get_data()
+    year = int(user_data['year'])
+    
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('UPDATE users SET current_year = ?, current_variant = ?, current_task_idx = 0, score = 0, errors_log = "" WHERE user_id = ?', (year, var_num, c.from_user.id))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
+    
     await c.message.delete()
     await send_ai_question(c.from_user.id, state)
 
 async def send_ai_question(uid: int, state: FSMContext):
     conn = sqlite3.connect('ce_math_2027.db')
-    year, var, idx = conn.execute('SELECT current_year, current_variant, current_task_idx FROM users WHERE user_id = ?', (uid,)).fetchone()
+    row = conn.execute('SELECT current_year, current_variant, current_task_idx FROM users WHERE user_id = ?', (uid,)).fetchone()
     conn.close()
     
+    if not row:
+        await bot.send_message(uid, "⚠️ Ошибка сессии. Нажмите /start.")
+        return
+        
+    year, var, idx = row
     seq = ["А1", "А2", "А3", "А4", "А5", "А6", "А7", "А8", "А9", "А10", "В1", "В4", "В6", "В8"]
+    
     if idx >= len(seq):
         conn = sqlite3.connect('ce_math_2027.db')
         score, logs = conn.execute('SELECT score, errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
         conn.close()
-        await bot.send_message(uid, f"🎯 **Тест завершен!**\nРезультат: *{score}* из {len(seq)}.\n🔍 Темы для повторения:\n_{logs or 'Ошибок нет!'}_", parse_mode="Markdown")
-        await state.clear(); return
+        
+        clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Полная готовность к 100 баллам ЦЭ! 🏆"
+        await bot.send_message(uid, f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(seq)}.\n🔍 Темы для повторения:\n_{clean_logs}_", parse_mode="Markdown")
+        await state.clear()
+        return
 
     task = seq[idx]
     msg = await bot.send_message(uid, f"🤖 *ИИ генерирует аналог задания {task}...*", parse_mode="Markdown")
     q = await generate_ai_task(task, year, var)
     await msg.delete()
     
-    if not q:
-        await bot.send_message(uid, "⚠️ Ошибка связи с ИИ. Нажмите /start."); return
+    if not q or 'options' not in q or 'question' not in q:
+        await bot.send_message(uid, "⚠️ Ошибка генерации или связи с ИИ. Нажмите /start для сброса.")
+        return
         
     await state.update_data(correct_idx=int(q['correct']), current_explain=q['explain'], current_topic=task)
+    
     b = InlineKeyboardBuilder()
-    for o_idx, opt in enumerate(q['options']): b.button(text=f"{o_idx+1}) {opt}", callback_data=f"ans_{o_idx}")
+    for o_idx, opt in enumerate(q['options']): 
+        b.button(text=f"{o_idx+1}) {opt}", callback_data=f"ans_{o_idx}")
+        
     await bot.send_message(uid, f"🤖 **Задание {task}** ({year} г. Вариант {var})\n\n{q['question']}", reply_markup=b.adjust(1).as_markup())
     await state.set_state(TrainerStates.solving)
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_"))
+    ans = int(c.data.split("_")[1])
     d = await state.get_data()
+    uid = c.from_user.id
+    
     conn = sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
-        conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (c.from_user.id,))
+        conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (uid,))
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
-        log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (c.from_user.id,)).fetchone()
+        log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
         log = log_res[0] if log_res and log_res[0] else ""
-        if d['current_topic'] not in log: conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", c.from_user.id))
+        if d['current_topic'] not in log: 
+            conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
-    conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (c.from_user.id,))
-    conn.commit(); conn.close()
+        
+    conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (uid,))
+    conn.commit()
+    conn.close()
     
     b = InlineKeyboardBuilder().button(text="Дальше ➡️", callback_data="next_ai_task")
     await c.message.answer(txt, reply_markup=b.as_markup())
@@ -151,13 +222,14 @@ async def handle_next(c: types.CallbackQuery, state: FSMContext):
 async def make_report(m: types.Message):
     conn = sqlite3.connect('ce_math_2027.db')
     df = pd.read_sql_query("SELECT username AS 'Имя', score AS 'Баллы', errors_log AS 'Ошибки' FROM users", conn)
-    conn.close(); df.to_excel("Отчет.xlsx", index=False)
-    await m.answer_document(types.FSInputFile("Отчет.xlsx"), caption="📊 Отчёт класса.")
-    os.remove("Отчет.xlsx")
+    conn.close()
+df.to_excel("Отчет.xlsx", index=False)
+await m.answer_document(types.FSInputFile("Отчет.xlsx"), caption="📊 Отчёт класса.")
+os.remove("Отчет.xlsx")
 
 async def main():
-    init_db()
-    await dp.start_polling(bot)
+init_db()
+await dp.start_polling(bot)
 
-if __name__ == '__main__':
-    asyncio.run(main())
+if name == 'main':
+asyncio.run(main())
