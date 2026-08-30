@@ -62,12 +62,14 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
+    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан список ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
+    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
-    # Кнопка комплексного финального теста на закрепление
+    # Кнопка комплексного финального теста на закрепление материала
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
     
     await message.answer(
@@ -83,7 +85,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_"))
+    year = int(c.data.split("_")[1])
     await state.update_data(year=year)
     
     b = InlineKeyboardBuilder()
@@ -95,7 +97,7 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_"))
+    var_num = int(c.data.split("_")[1])
     user_data = await state.get_data()
     year = int(user_data['year'])
     
@@ -160,7 +162,7 @@ async def handle_back_to_start(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_"))
+    ans = int(c.data.split("_")[1])
     d = await state.get_data()
     uid = c.from_user.id
     
@@ -170,7 +172,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Абсолютно верно! Ловушка успешно обойдена.**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res if log_res and log_res else ""
+        log = log_res[0] if log_res and log_res[0] else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Попадание в капкан РИКЗ!**\n\n{d['current_explain']}"
