@@ -26,7 +26,7 @@ class TrainerStates(StatesGroup):
 
 MODELS_PROMPTS = {
     "А1": "Определение правильной обыкновенной дроби. Дай числовой ряд, спроси при каком x дробь правильная.",
-    "А2": "Составление выражения суммы двух последовательных натураческих чисел, меньшее равно m.",
+    "А2": "Составление выражения суммы двух последовательных натуральных чисел, меньшее равно m.",
     "А3": "Геометрия. Свойства вписанного и центрального угла на одной дуге. Дай значение центрального угла, спроси вписанный угол.",
     "А4": "Система неравенств [x >= a, x < b], варианты ответов в виде квадратных корней.",
     "А5": "Свойства f(x) = sqrt(x). Дай неравенство sqrt(x) < 1/n и числовой ряд дробей.",
@@ -56,8 +56,10 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
     }
     base_prompt = MODELS_PROMPTS.get(task_num, "Задача по математике повышенной сложности уровня ЦЭ.")
     prompt = f"Ты составитель тестов РИКЗ в Беларуси. Сгенерируй аналог Задания {task_num} из сборника {year} года, вариант {variant}. Модель: {base_prompt}. Измени сюжет и числа, но сохрани ловушку РИКЗ! Выдай ответ СТРОГО в формате JSON на русском языке без лишнего текста вокруг: {{\"question\": \"текст\", \"options\": [\"Вариант1\",\"Вариант2\",\"Вариант3\",\"Вариант4\"], \"correct\": 0, \"explain\": \"разбор ловушки\"}} Где correct - строго число от 0 до 3."
+    
+    # ОБНОВЛЕНО: Переключение на скоростную, полностью безотказную модель Google Gemini через OpenRouter
     payload = {
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        "model": "google/gemini-flash-1.5-8b:free",
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"}
     }
@@ -65,7 +67,7 @@ async def generate_ai_task(task_num: str, year: int, variant: int):
         async with session.post(url, headers=headers, json=payload, timeout=25) as response:
             if response.status == 200:
                 res_data = await response.json()
-                raw_text = res_data['choices'][0]['message']['content']
+                raw_text = res_data['choices']['message']['content']
                 return json.loads(clean_json_string(raw_text))
             return None
 
@@ -82,6 +84,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
     conn.commit()
     conn.close()
+    
     available_years = [2023, 2024, 2025, 2026]
     b = InlineKeyboardBuilder()
     for y in available_years:
