@@ -62,9 +62,7 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
-    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан список ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
-    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -72,16 +70,53 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     # Кнопка комплексного финального теста на закрепление материала
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
     
+    # НОВАЯ КНОПКА: Подключаем учебный теоретический комплекс
+    b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
+    
     await message.answer(
         "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n\n"
-        "Все учебные базы успешно подключены. Пройдите архивные сборники или запустите финальный контрольный срез:\n", 
-        reply_markup=b.adjust(2, 2, 1).as_markup()
+        "Все учебные базы и теоретические модули успешно подключены!\n"
+        "Выберите раздел для работы:", 
+        reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
 
 @dp.message(CommandStart())
 async def cmd_start(m: types.Message, state: FSMContext):
     await show_main_menu(m, state, m.from_user.id, m.from_user.full_name)
+
+@dp.callback_query(F.data == "open_theory")
+async def process_theory_menu(c: types.CallbackQuery):
+    """Меню выбора разделов теории по кодификатору РИКЗ"""
+    b = InlineKeyboardBuilder()
+    b.button(text="🔢 Числа и вычисления", callback_data="th_numbers")
+    b.button(text="📐 Выражения и степени", callback_data="th_expressions")
+    b.button(text="⚖️ Уравнения и неравенства", callback_data="th_equations")
+    b.button(text="📈 Функции и их свойства", callback_data="th_functions")
+    b.button(text="📐 Геометрия (2D и 3D)", callback_data="th_geometry")
+    b.button(text="🎲 Вероятность и комбинаторика", callback_data="th_probability")
+    b.button(text="⬅️ В главное меню", callback_data="back_to_start")
+    
+    await c.message.edit_text(
+        "📖 **МЕТОДИЧЕСКИЙ СПРАВОЧНИК ЦЭ 2027**\n\n"
+        "Выберите интересующий вас раздел математики для изучения теории и разбора ловушек РИКЗ:",
+        reply_markup=b.adjust(1).as_markup()
+    )
+
+@dp.callback_query(F.data.startswith("th_"))
+async def show_theory_content(c: types.CallbackQuery):
+    """Вывод расширенного текста теории из файла theory_base.py"""
+    try:
+        from theory_base import THEORY_DATA
+        text = THEORY_DATA.get(c.data, "⚠️ Раздел находится на наполнении.")
+    except ImportError:
+        text = "⚠️ Ошибка подключения модуля теории. Проверьте наличие theory_base.py на GitHub."
+        
+    b = InlineKeyboardBuilder()
+    b.button(text="⬅️ Назад к разделам", callback_data="open_theory")
+    b.button(text="🏠 В главное меню", callback_data="back_to_start")
+    
+    await c.message.edit_text(text, parse_mode="Markdown", reply_markup=b.adjust(1).as_markup())
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
@@ -172,7 +207,7 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
         txt = f"✅ **Абсолютно верно! Ловушка успешно обойдена.**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res[0] if log_res and log_res[0] else ""
+        log = log_res if log_res and log_res else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Попадание в капкан РИКЗ!**\n\n{d['current_explain']}"
