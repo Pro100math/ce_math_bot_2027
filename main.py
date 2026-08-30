@@ -23,7 +23,6 @@ class TrainerStates(StatesGroup):
 def init_db():
     conn = sqlite3.connect('ce_math_2027.db')
     cursor = conn.cursor()
-    # Таблица пользователей
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -35,7 +34,6 @@ def init_db():
             errors_log TEXT DEFAULT ''
         )
     ''')
-    # Таблица ВСЕХ 1200 задач ЦЭ/ЦТ
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS exam_tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,17 +55,20 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     init_db()
     
+    user_id = message.from_user.id
     conn = sqlite3.connect('ce_math_2027.db')
     cursor = conn.cursor()
-    cursor.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (message.from_user.id, message.from_user.full_name))
+    cursor.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (user_id, message.from_user.full_name))
     
-    # Проверяем, сколько задач в базе
     cursor.execute('SELECT COUNT(*) FROM exam_tasks')
     count = cursor.fetchone()[0]
     conn.close()
     
+    # Список доступных лет сборников РИКЗ
+    available_years = [2023, 2024, 2025, 2026]
+    
     builder = InlineKeyboardBuilder()
-    for year in:
+    for year in available_years:
         builder.button(text=f"📚 Сборник {year} г.", callback_data=f"year_{year}")
     builder.adjust(2)
     
@@ -81,11 +82,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(callback: types.CallbackQuery, state: FSMContext):
-    year = int(callback.data.split("_"))
+    year = int(callback.data.split("_")[1])
     await state.update_data(year=year)
     
     builder = InlineKeyboardBuilder()
-    for v in range(1, 11): # Все 10 вариантов сборника
+    for v in range(1, 11):
         builder.button(text=f"Вар {v}", callback_data=f"var_{v}")
     builder.adjust(5)
     
@@ -97,7 +98,7 @@ async def process_year(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(callback: types.CallbackQuery, state: FSMContext):
-    var_num = int(callback.data.split("_"))
+    var_num = int(callback.data.split("_")[1])
     user_data = await state.get_data()
     year = int(user_data['year'])
     user_id = callback.from_user.id
@@ -117,7 +118,6 @@ async def send_db_question(user_id: int, state: FSMContext):
     cursor.execute('SELECT current_year, current_variant, current_task_idx FROM users WHERE user_id = ?', (user_id,))
     year, var, idx = cursor.fetchone()
     
-    # Извлекаем задачу по очереди (OFFSET) из базы данных сервера
     cursor.execute('SELECT task_num, task_type, topic, question, id FROM exam_tasks WHERE year = ? AND variant = ? LIMIT 1 OFFSET ?', (year, var, idx))
     task = cursor.fetchone()
     
@@ -149,7 +149,7 @@ async def send_db_question(user_id: int, state: FSMContext):
         f"📊 **Задание {t_num} (Часть {t_type})**\n"
         f"Раздел: #{t_topic.replace(' ', '_')}\n\n"
         f"{t_quest}\n\n"
-        f"✏️ **Решите задачу и введите числовой ответ (или цифры вариантов для части А):**"
+        f"✏️ **Решите задачу и введите числовой ответ:**"
     )
     await state.set_state(TrainerStates.solving)
 
