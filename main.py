@@ -20,7 +20,7 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
-# МАГИЯ ПОДКЛЮЧЕНИЯ: Импортируем нашу базу 30 задач из файла tasks_base.py
+# Импортируем нашу базу 30 задач из файла tasks_base.py
 try:
     from tasks_base import DATABASE
 except ImportError:
@@ -44,10 +44,11 @@ async def cmd_start(m: types.Message, state: FSMContext):
     
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)', (m.from_user.id, m.from_user.full_name))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
     
-    # Полный список доступных сборников РИКЗ
-    available_years =
+    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан доступный сборник
+    available_years = [2023]
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -62,7 +63,7 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
-    year = int(c.data.split("_"))
+    year = int(c.data.split("_")[1])
     await state.update_data(year=year)
     
     b = InlineKeyboardBuilder()
@@ -73,13 +74,14 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("var_"))
 async def process_variant(c: types.CallbackQuery, state: FSMContext):
-    var_num = int(c.data.split("_"))
+    var_num = int(c.data.split("_")[1])
     user_data = await state.get_data()
     year = int(user_data['year'])
     
     conn = sqlite3.connect('ce_math_2027.db')
     conn.execute('UPDATE users SET current_year = ?, current_variant = ?, current_task_idx = 0, score = 0, errors_log = "" WHERE user_id = ?', (year, var_num, c.from_user.id))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
     
     await c.message.delete()
     await send_local_question(c.from_user.id, state)
@@ -102,7 +104,8 @@ async def send_local_question(uid: int, state: FSMContext):
         conn.close()
         clean_logs = logs.strip().strip("•").strip() if logs else "Ошибок нет! Полная готовность к 100 баллам! 🏆"
         await bot.send_message(uid, f"🎯 **Тест завершен!**\n\nРезультат: *{score}* из {len(filtered_tasks)}.\n🔍 Темы для повторения:\n_{clean_logs}_", parse_mode="Markdown")
-        await state.clear(); return
+        await state.clear()
+        return
 
     q = filtered_tasks[idx]
     await state.update_data(correct_idx=int(q['correct']), current_explain=q['explain'], current_topic=q['topic'])
@@ -116,23 +119,24 @@ async def send_local_question(uid: int, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(c: types.CallbackQuery, state: FSMContext):
-    ans = int(c.data.split("_"))
+    ans = int(c.data.split("_")[1])
     d = await state.get_data()
     uid = c.from_user.id
     
-    conn = sqlite3.connect('ce_math_2027.db')
+    conn = sqlite3.sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
         conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (uid,))
         txt = f"✅ **Верно!**\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res if log_res and log_res else ""
+        log = log_res[0] if log_res and log_res[0] else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
         txt = f"❌ **Ловушка РИКЗ!**\n\n{d['current_explain']}"
         
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (uid,))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
     
     b = InlineKeyboardBuilder().button(text="Дальше ➡️", callback_data="next_local_task")
     await c.message.answer(txt, reply_markup=b.as_markup())
