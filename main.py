@@ -21,10 +21,9 @@ class TrainerStates(StatesGroup):
     solving = State()
 
 # ================= СЕЙФ ВАШИХ ЛИЧНЫХ МЕТОДИЧЕСКИХ ПОСОБИЙ =================
-# Прямые ссылки на ваши PDF-файлы на Google Диске
 THEORY_LINKS = {
-    "algebra": "https://drive.google.com/file/d/1y4BjaTPPiPOrcgZI10m0DRuYedz6ZAiE/view?usp=drive_link",
-    "geometry": "https://drive.google.com/file/d/16100cMmifJm2Bf33m2W9ZwPe8aU-cG0T/view?usp=drive_link"
+    "algebra": "https://google.com",
+    "geometry": "https://google.com"
 }
 
 def get_database_by_year(year: int):
@@ -75,13 +74,11 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
-    
-    # Кнопка теоретического справочника
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
-        "🎓 Комплекс «ЦЭ/ЦТ 2027: Математика без ошибок».\n\n"
-        "Выберите раздел для работы:", 
+        "🎓 Комплекс **«ЦЭ/ЦТ 2027: Математика без ошибок»**.\n\n"
+        "Выберите интересующий вас раздел математики для повторения теоретического материала:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -92,17 +89,14 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "open_theory")
 async def process_theory_menu(c: types.CallbackQuery):
-    """Меню выбора ваших пособий по Алгебре и Геометрии"""
     b = InlineKeyboardBuilder()
-    
-    # Две монолитные кнопки-ссылки на ваши Google Документы
     b.row(types.InlineKeyboardButton(text="🧮 Алгебра для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["algebra"]))
     b.row(types.InlineKeyboardButton(text="📐 Геометрия для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["geometry"]))
     b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ 2027\n\n"
-        "Нажмите на интересующий вас раздел математики, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
+        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ/ЦТ 2027\n\n"
+        "Нажмите на интересующий вас предмет, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
         reply_markup=b.as_markup()
     )
 
@@ -161,7 +155,7 @@ async def send_local_question(uid: int, state: FSMContext):
         
         await bot.send_message(
             uid, 
-            f"🎯 **Тест завершен!**\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
+            f"🎯 Тест завершен!\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
             parse_mode="Markdown",
             reply_markup=b.as_markup()
         )
@@ -192,13 +186,13 @@ async def handle_answer(c: types.CallbackQuery, state: FSMContext):
     conn = sqlite3.connect('ce_math_2027.db')
     if ans == d['correct_idx']:
         conn.execute('UPDATE users SET score = score + 1 WHERE user_id = ?', (uid,))
-        txt = f"✅ **Абсолютно верно! Ловушка успешно обойдена.**\n\n{d['current_explain']}"
+        txt = f"✅ Абсолютно верно! Ловушка успешно обойдена.\n\n{d['current_explain']}"
     else:
         log_res = conn.execute('SELECT errors_log FROM users WHERE user_id = ?', (uid,)).fetchone()
-        log = log_res if log_res and log_res else ""
+        log = log_res[0] if log_res and log_res[0] else ""
         if d['current_topic'] not in log: 
             conn.execute('UPDATE users SET errors_log = ? WHERE user_id = ?', (f"{log} • {d['current_topic']}", uid))
-        txt = f"❌ **Попадание в капкан РИКЗ!**\n\n{d['current_explain']}"
+        txt = f"❌ Попадание в капкан РИКЗ!\n\n{d['current_explain']}"
         
     conn.execute('UPDATE users SET current_task_idx = current_task_idx + 1 WHERE user_id = ?', (uid,))
     conn.commit()
@@ -212,14 +206,31 @@ async def handle_next(c: types.CallbackQuery, state: FSMContext):
     await c.message.delete()
     await send_local_question(c.from_user.id, state)
 
+# ================= ОБНОВЛЕННАЯ ФУНКЦИЯ МОНИТОРИНГА УЧЕНИКОВ =================
 @dp.message(Command("report"))
 async def make_report(m: types.Message):
     conn = sqlite3.connect('ce_math_2027.db')
-    df = pd.read_sql_query("SELECT username AS 'Имя', score AS 'Баллы', errors_log AS 'Ошибки' FROM users", conn)
+    # Считываем полную информацию: кто зашёл, какой сборник решает и сколько задач выполнил
+    query = """
+    SELECT 
+        user_id AS 'Telegram ID', 
+        username AS 'Имя Фамилия', 
+        current_year AS 'Выбранный Сборник',
+        current_variant AS 'Вариант',
+        current_task_idx AS 'Выполнено заданий',
+        score AS 'Правильных ответов',
+        errors_log AS 'Ошибки и путаница в темах'
+    FROM users
+    """
+    df = pd.read_sql_query(query, conn)
     conn.close()
-    df.to_excel("Отчет.xlsx", index=False)
-    await m.answer_document(types.FSInputFile("Отчет.xlsx"), caption="📊 Отчёт класса.")
-    os.remove("Отчет.xlsx")
+    
+    df.to_excel("Мониторинг_ЦЭ_2027.xlsx", index=False)
+    await m.answer_document(
+        types.FSInputFile("Мониторинг_ЦЭ_2027.xlsx"), 
+        caption="📊 Учебно-методический отчёт контроля знаний класса\n\nЗдесь зафиксированы все заходы, текущий прогресс выполнения задач и темы ошибок."
+    )
+    os.remove("Мониторинг_ЦЭ_2027.xlsx")
 
 async def main():
     init_db()
