@@ -20,6 +20,13 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
+# ================= СЕЙФ ВАШИХ МЕТОДИЧЕСКИХ ССЫЛОК =================
+# Замените эти ссылки на реальные адреса ваших PDF-файлов в облаке
+THEORY_LINKS = {
+    "th_algebra": "https://https://app.diffit.me/project/7486a347-4f68-47ce-9708-30b812fe06b7?utm_source=copy_link&utm_medium=referral&utm_campaign=packet_share&ref=hs3rt9at&ref_src=copy_link_packet_modal",
+    "th_geometry": "https://app.diffit.me/project/d960b920-2ab8-4a31-879f-1bfb5c54be5d/6f23df17-7066-428e-b5dc-c90b34188eb6?utm_source=copy_link&utm_medium=referral&utm_campaign=packet_share&ref=hs3rt9at&ref_src=copy_link_share_dialog"
+}
+
 def get_database_by_year(year: int):
     """Динамически подключаем нужный файл с заданиями в зависимости от года или финала"""
     try:
@@ -62,23 +69,17 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
-    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан список ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
-    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
-    # Кнопка комплексного финального теста на закрепление материала
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
-    
-    # Подключаем учебный теоретический комплекс
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
         "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n\n"
-        "Все учебные базы и теоретические модули успешно подключены!\n"
-        "Выберите раздел для работы:", 
+        "Все учебные базы успешно подключены! Выберите раздел для работы:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -89,36 +90,23 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "open_theory")
 async def process_theory_menu(c: types.CallbackQuery):
-    """Меню выбора разделов теории по кодификатору РИКЗ"""
+    """Меню со специальными кнопками-ссылками (URL-кнопками)"""
     b = InlineKeyboardBuilder()
-    b.button(text="🔢 Числа и вычисления", callback_data="th_numbers")
-    b.button(text="📐 Выражения и степени", callback_data="th_expressions")
-    b.button(text="⚖️ Уравнения и неравенства", callback_data="th_equations")
-    b.button(text="📈 Функции и их свойства", callback_data="th_functions")
-    b.button(text="📐 Геометрия (2D и 3D)", callback_data="th_geometry")
-    b.button(text="🎲 Вероятность и комбинаторика", callback_data="th_probability")
-    b.button(text="⬅️ В главное меню", callback_data="back_to_start")
+    
+    # Кнопки ведут прямо на открытие документов в браузере мобильного телефона
+    b.row(types.InlineKeyboardButton(text="🔢 Числа и вычисления (PDF)", url=THEORY_LINKS["th_numbers"]))
+    b.row(types.InlineKeyboardButton(text="📐 Выражения и степени (PDF)", url=THEORY_LINKS["th_expressions"]))
+    b.row(types.InlineKeyboardButton(text="⚖️ Уравнения и неравенства (PDF)", url=THEORY_LINKS["th_equations"]))
+    b.row(types.InlineKeyboardButton(text="📈 Функции и их свойства (PDF)", url=THEORY_LINKS["th_functions"]))
+    b.row(types.InlineKeyboardButton(text="📐 Геометрия 2D/3D (PDF)", url=THEORY_LINKS["th_geometry"]))
+    b.row(types.InlineKeyboardButton(text="🎲 Вероятность и комбинаторика (PDF)", url=THEORY_LINKS["th_probability"]))
+    b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 **МЕТОДИЧЕСКИЙ СПРАВОЧНИК ЦЭ 2027**\n\n"
-        "Выберите интересующий вас раздел математики для изучения теории и разбора ловушек РИКЗ:",
-        reply_markup=b.adjust(1).as_markup()
+        "📖 **ИНТЕРАКТИВНЫЙ СПРАВОЧНИК ЦЭ 2027**\n\n"
+        "Нажмите на любой раздел, и бот мгновенно откроет для вас полный методический PDF-документ с формулами и разбором капканов РИКЗ:",
+        reply_markup=b.as_markup()
     )
-
-@dp.callback_query(F.data.startswith("th_"))
-async def show_theory_content(c: types.CallbackQuery):
-    """Вывод расширенного текста теории из файла theory_base.py"""
-    try:
-        from theory_base import THEORY_DATA
-        text = THEORY_DATA.get(c.data, "⚠️ Раздел находится на наполнении.")
-    except ImportError:
-        text = "⚠️ Ошибка подключения модуля теории. Проверьте наличие theory_base.py на GitHub."
-        
-    b = InlineKeyboardBuilder()
-    b.button(text="⬅️ Назад к разделам", callback_data="open_theory")
-    b.button(text="🏠 В главное меню", callback_data="back_to_start")
-    
-    await c.message.edit_text(text, parse_mode="Markdown", reply_markup=b.adjust(1).as_markup())
 
 @dp.callback_query(F.data.startswith("year_"))
 async def process_year(c: types.CallbackQuery, state: FSMContext):
