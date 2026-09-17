@@ -80,7 +80,7 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     
     await message.answer(
         "🎓 Комплекс «ЦЭ/ЦТ 2027: Математика без ошибок».\n\n"
-        "Все учебные базы и ваши методические материалы успешно подключены! Выберите раздел для работы:", 
+        "Все учебные базы и методические материалы успешно подключены! Выберите раздел для работы:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -99,7 +99,7 @@ async def process_theory_menu(c: types.CallbackQuery):
     b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ/ЦТ 2027**\n\n"
+        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ/ЦТ 2027\n\n"
         "Выберите интересующий вас раздел и приступите к работе",
         reply_markup=b.as_markup()
     )
@@ -159,7 +159,7 @@ async def send_local_question(uid: int, state: FSMContext):
         
         await bot.send_message(
             uid, 
-            f"🎯 Тест завершен!**\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
+            f"🎯 Тест завершен!\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
             parse_mode="Markdown",
             reply_markup=b.as_markup()
         )
