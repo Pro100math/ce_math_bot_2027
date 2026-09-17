@@ -23,8 +23,8 @@ class TrainerStates(StatesGroup):
 # ================= СЕЙФ ВАШИХ МЕТОДИЧЕСКИХ ССЫЛОК =================
 # Замените эти ссылки на реальные адреса ваших PDF-файлов в облаке
 THEORY_LINKS = {
-    "th_algebra": "https://https://app.diffit.me/project/7486a347-4f68-47ce-9708-30b812fe06b7?utm_source=copy_link&utm_medium=referral&utm_campaign=packet_share&ref=hs3rt9at&ref_src=copy_link_packet_modal",
-    "th_geometry": "https://app.diffit.me/project/d960b920-2ab8-4a31-879f-1bfb5c54be5d/6f23df17-7066-428e-b5dc-c90b34188eb6?utm_source=copy_link&utm_medium=referral&utm_campaign=packet_share&ref=hs3rt9at&ref_src=copy_link_share_dialog"
+    "th_algebra": "https://drive.google.com/file/d/1y4BjaTPPiPOrcgZI10m0DRuYedz6ZAiE/view?usp=sharing",
+    "th_geometry": "https://drive.google.com/file/d/16100cMmifJm2Bf33m2W9ZwPe8aU-cG0T/view?usp=sharing"
 }
 
 def get_database_by_year(year: int):
