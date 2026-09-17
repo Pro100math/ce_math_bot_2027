@@ -80,8 +80,8 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
-        "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n\n"
-        "Все учебные базы и ваши методические материалы успешно подключены! Выберите раздел для работы:", 
+        "🎓 Комплекс «ЦЭ/ЦТ 2027: Математика без ошибок».\n\n"
+        "Выберите раздел для работы:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -101,8 +101,8 @@ async def process_theory_menu(c: types.CallbackQuery):
     b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 **МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ 2027**\n\n"
-        "Нажмите на интересующий вас предмет, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
+        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ 2027\n\n"
+        "Нажмите на интересующий вас раздел математики, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
         reply_markup=b.as_markup()
     )
 
