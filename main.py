@@ -22,12 +22,12 @@ class TrainerStates(StatesGroup):
 
 # ================= СЕЙФ ВАШИХ ЛИЧНЫХ МЕТОДИЧЕСКИХ ПОСОБИЙ =================
 THEORY_LINKS = {
-    "algebra": "https://google.com",
-    "geometry": "https://google.com"
+    "algebra": "https://drive.google.com/file/d/1y4BjaTPPiPOrcgZI10m0DRuYedz6ZAiE/view?usp=drive_link",
+    "geometry": "https://drive.google.com/file/d/16100cMmifJm2Bf33m2W9ZwPe8aU-cG0T/view?usp=drive_link"
 }
 
 def get_database_by_year(year: int):
-    """Динамически подключаем нужный файл с заданиями в зависимости от года или финала"""
+    """Динамически подключаем нужный ... заданий в зависимости от года или финала"""
     try:
         if year == 2023:
             from tasks_2023 import DATABASE
@@ -68,7 +68,9 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     conn.commit()
     conn.close()
     
+    # СТРОКА НАМЕРТВО ИСПРАВЛЕНА: Прописан список ваших 4 сборников ЦЭ
     available_years = [2023, 2024, 2025, 2026]
+    
     b = InlineKeyboardBuilder()
     for y in available_years:
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
@@ -77,8 +79,8 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
-        "🎓 Комплекс **«ЦЭ/ЦТ 2027: Математика без ошибок»**.\n\n"
-        "Выберите интересующий вас раздел математики для повторения теоретического материала:", 
+        "🎓 Комплекс «ЦЭ/ЦТ 2027: Математика без ошибок».\n\n"
+        "Все учебные базы и ваши методические материалы успешно подключены! Выберите раздел для работы:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -89,14 +91,16 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "open_theory")
 async def process_theory_menu(c: types.CallbackQuery):
+    """Меню выбора ваших пособий по Алгебре и Геометрии"""
     b = InlineKeyboardBuilder()
-    b.row(types.InlineKeyboardButton(text="🧮 Алгебра для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["algebra"]))
-    b.row(types.InlineKeyboardButton(text="📐 Геометрия для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["geometry"]))
+    
+    b.row(types.InlineKeyboardButton(text="🧮 Алгебра ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["algebra"]))
+    b.row(types.InlineKeyboardButton(text="📐 Геометрия ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["geometry"]))
     b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ/ЦТ 2027\n\n"
-        "Нажмите на интересующий вас предмет, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
+        "📖 МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ/ЦТ 2027**\n\n"
+        "Выберите интересующий вас раздел и приступите к работе",
         reply_markup=b.as_markup()
     )
 
@@ -108,7 +112,7 @@ async def process_year(c: types.CallbackQuery, state: FSMContext):
     b = InlineKeyboardBuilder()
     b.button(text="Вариант 1", callback_data="var_1")
     
-    title_text = "Контрольный тест на закрепление" if year == 2027 else f"Сборник {year} года"
+    title_text = "Контрольный ... на закрепление" if year == 2027 else f"Сборник {year} года"
     await c.message.edit_text(f"Выбран: {title_text}. 📅\nТеперь выберите вариант:", reply_markup=b.adjust(1).as_markup())
     await state.set_state(TrainerStates.choosing_variant)
 
@@ -155,7 +159,7 @@ async def send_local_question(uid: int, state: FSMContext):
         
         await bot.send_message(
             uid, 
-            f"🎯 Тест завершен!\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
+            f"🎯 Тест завершен!**\n\nИтоговый результат: *{score}* из {len(filtered_tasks)}.\n🔍 Зоны для повторения:\n_{clean_logs}_", 
             parse_mode="Markdown",
             reply_markup=b.as_markup()
         )
@@ -169,7 +173,7 @@ async def send_local_question(uid: int, state: FSMContext):
     for o_idx, opt in enumerate(q['options']): 
         b.button(text=f"{o_idx+1}) {opt}", callback_data=f"ans_{o_idx}")
         
-    await bot.send_message(uid, f"📊 **Задание {q['task_num']} (Часть {q['type']})**\nРаздел: #{q['topic'].replace(' ', '_')}\n\n{q['question']}", reply_markup=b.adjust(1).as_markup())
+    await bot.send_message(uid, f"📊 Задание {q['task_num']} (Часть {q['type']})**\nРаздел: #{q['topic'].replace(' ', '_')}\n\n{q['question']}", reply_markup=b.adjust(1).as_markup())
     await state.set_state(TrainerStates.solving)
 
 @dp.callback_query(F.data == "back_to_start")
@@ -210,7 +214,6 @@ async def handle_next(c: types.CallbackQuery, state: FSMContext):
 @dp.message(Command("report"))
 async def make_report(m: types.Message):
     conn = sqlite3.connect('ce_math_2027.db')
-    # Считываем полную информацию: кто зашёл, какой сборник решает и сколько задач выполнил
     query = """
     SELECT 
         user_id AS 'Telegram ID', 
