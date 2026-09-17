@@ -20,11 +20,11 @@ class TrainerStates(StatesGroup):
     choosing_variant = State()
     solving = State()
 
-# ================= СЕЙФ ВАШИХ МЕТОДИЧЕСКИХ ССЫЛОК =================
-# Замените эти ссылки на реальные адреса ваших PDF-файлов в облаке
+# ================= СЕЙФ ВАШИХ ЛИЧНЫХ МЕТОДИЧЕСКИХ ПОСОБИЙ =================
+# Прямые ссылки на ваши PDF-файлы на Google Диске
 THEORY_LINKS = {
-    "th_algebra": "https://drive.google.com/file/d/1y4BjaTPPiPOrcgZI10m0DRuYedz6ZAiE/view?usp=sharing",
-    "th_geometry": "https://drive.google.com/file/d/16100cMmifJm2Bf33m2W9ZwPe8aU-cG0T/view?usp=sharing"
+    "algebra": "https://drive.google.com/file/d/1y4BjaTPPiPOrcgZI10m0DRuYedz6ZAiE/view?usp=drive_link",
+    "geometry": "https://drive.google.com/file/d/16100cMmifJm2Bf33m2W9ZwPe8aU-cG0T/view?usp=drive_link"
 }
 
 def get_database_by_year(year: int):
@@ -75,11 +75,13 @@ async def show_main_menu(message: types.Message, state: FSMContext, user_id: int
         b.button(text=f"📚 Сборник {y} г.", callback_data=f"year_{y}")
     
     b.button(text="🎯 ТЕСТ НА ЗАКРЕПЛЕНИЕ (ФИНАЛ)", callback_data="year_2027")
+    
+    # Кнопка теоретического справочника
     b.button(text="📖 ТЕОРЕТИЧЕСКИЙ СПРАВОЧНИК", callback_data="open_theory")
     
     await message.answer(
         "🎓 Комплекс **«ЦЭ 2027: НЕЙРО-НАСТАВНИК»**.\n\n"
-        "Все учебные базы успешно подключены! Выберите раздел для работы:", 
+        "Все учебные базы и ваши методические материалы успешно подключены! Выберите раздел для работы:", 
         reply_markup=b.adjust(2, 2, 1, 1).as_markup()
     )
     await state.set_state(TrainerStates.choosing_year)
@@ -90,21 +92,17 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "open_theory")
 async def process_theory_menu(c: types.CallbackQuery):
-    """Меню со специальными кнопками-ссылками (URL-кнопками)"""
+    """Меню выбора ваших пособий по Алгебре и Геометрии"""
     b = InlineKeyboardBuilder()
     
-    # Кнопки ведут прямо на открытие документов в браузере мобильного телефона
-    b.row(types.InlineKeyboardButton(text="🔢 Числа и вычисления (PDF)", url=THEORY_LINKS["th_numbers"]))
-    b.row(types.InlineKeyboardButton(text="📐 Выражения и степени (PDF)", url=THEORY_LINKS["th_expressions"]))
-    b.row(types.InlineKeyboardButton(text="⚖️ Уравнения и неравенства (PDF)", url=THEORY_LINKS["th_equations"]))
-    b.row(types.InlineKeyboardButton(text="📈 Функции и их свойства (PDF)", url=THEORY_LINKS["th_functions"]))
-    b.row(types.InlineKeyboardButton(text="📐 Геометрия 2D/3D (PDF)", url=THEORY_LINKS["th_geometry"]))
-    b.row(types.InlineKeyboardButton(text="🎲 Вероятность и комбинаторика (PDF)", url=THEORY_LINKS["th_probability"]))
+    # Две монолитные кнопки-ссылки на ваши Google Документы
+    b.row(types.InlineKeyboardButton(text="🧮 Алгебра для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["algebra"]))
+    b.row(types.InlineKeyboardButton(text="📐 Геометрия для ЦТ и ЦЭ (PDF)", url=THEORY_LINKS["geometry"]))
     b.row(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_start"))
     
     await c.message.edit_text(
-        "📖 **ИНТЕРАКТИВНЫЙ СПРАВОЧНИК ЦЭ 2027**\n\n"
-        "Нажмите на любой раздел, и бот мгновенно откроет для вас полный методический PDF-документ с формулами и разбором капканов РИКЗ:",
+        "📖 **МЕТОДИЧЕСКИЕ ПОСОБИЯ ЦЭ 2027**\n\n"
+        "Нажмите на интересующий вас предмет, чтобы мгновенно открыть полное авторское пособие с формулами и разбором капканов РИКЗ прямо в браузере телефона:",
         reply_markup=b.as_markup()
     )
 
